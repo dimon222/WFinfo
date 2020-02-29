@@ -1,5 +1,6 @@
-| ![WFCD](https://avatars3.githubusercontent.com/u/24436369?s=200&v=4)  ![WFInfo](https://raw.githubusercontent.com/WFCD/WFinfo/master/WFInfo/Resources/WFLogo.png) |
-| :--: | 
+<p align="center">
+![WFCD](https://avatars3.githubusercontent.com/u/24436369?s=200&v=4)  ![WFInfo](https://raw.githubusercontent.com/WFCD/WFinfo/master/WFInfo/Resources/WFLogo.png)
+</p>
 
 # Description
 
