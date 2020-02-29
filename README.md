@@ -1,6 +1,6 @@
 <p align="center">
-   <img width="200" height="200" src="https://avatars3.githubusercontent.com/u/24436369?s=200&v=4">
    <img width="200" height="200" src="https://raw.githubusercontent.com/WFCD/WFinfo/master/WFInfo/Resources/WFLogo.png">
+   <img width="200" height="200" src="https://avatars3.githubusercontent.com/u/24436369?s=200&v=4">
 </p>
 
 # Description
