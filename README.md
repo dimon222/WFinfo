@@ -1,7 +1,10 @@
 <p align="center">
    <img width="200" height="200" src="https://raw.githubusercontent.com/WFCD/WFinfo/master/WFInfo/Resources/WFLogo.png">
-   <img src="https://warframestat.us/wfcd.png">
 </p>
+<p align="center">
+   <img width="200" height="200" src="https://warframestat.us/wfcd.png">
+</p>
+
 
 # Description
 
