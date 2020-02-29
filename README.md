@@ -1,5 +1,5 @@
 <p align="center">
-   <img src="https://raw.githubusercontent.com/WFCD/WFinfo/master/WFInfo/Resources/WFLogo.png">
+   <img height="200" width="200" src="https://raw.githubusercontent.com/WFCD/WFinfo/master/WFInfo/Resources/WFLogo.png">
 </p>
 <p align="center">
    <img src="https://raw.githubusercontent.com/WFCD/WFinfo/feature/logo/wfcd_banner.png">
