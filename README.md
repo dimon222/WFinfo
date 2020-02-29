@@ -1,10 +1,6 @@
 <p align="center">
    <img height="100" width="100" src="https://raw.githubusercontent.com/WFCD/WFinfo/master/WFInfo/Resources/WFLogo.png">
 </p>
-<p align="center">
-   <img src="https://raw.githubusercontent.com/WFCD/WFinfo/feature/logo/wfcd_banner.png">
-</p>
-
 
 # Description
 
@@ -62,3 +58,5 @@ https://forums.warframe.com/topic/875096-wfinfo-in-game-ducats-and-platinum-pric
 [Discord](https://discord.gg/qfd3eFb)
 
 [Website](https://random-facades.github.io/WFInfo/)
+
+[![Supported by Warframe Community Developers](https://warframestat.us/wfcd.png)](https://github.com/WFCD "Supported by Warframe Community Developers")
