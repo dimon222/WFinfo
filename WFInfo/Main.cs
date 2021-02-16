@@ -2,10 +2,12 @@ using System;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using System.Text.RegularExpressions;
+using System.Threading;
 using AutoUpdaterDotNET;
 using System.Windows;
 using System.Windows.Forms;
@@ -220,6 +222,7 @@ namespace WFInfo
                     AddLog("Loading screenshot from file");
                     StatusUpdate("Offline testing with screenshot", 0);
                     LoadScreenshot();
+                    //ScanFolder();
                 }
                 else if (Keyboard.IsKeyDown(Settings.SnapitModifierKey))
                 {//snapit
@@ -303,7 +306,8 @@ namespace WFInfo
                 {//normal debug
                     AddLog("Loading screenshot from file");
                     StatusUpdate("Offline testing with screenshot", 0);
-                    LoadScreenshot();
+                    //LoadScreenshot();
+                    ScanFolder();
                 }
                 else if (Keyboard.IsKeyDown(Settings.SnapitModifierKey))
                 {//snapit
@@ -369,6 +373,65 @@ namespace WFInfo
                             StatusUpdate("Failed to load image", 1);
                         }
                     });
+                }
+                else
+                {
+                    StatusUpdate("Failed to load image", 1);
+                    OCR.processingActive = false;
+                }
+            }
+        }
+
+        private void ScanFolder()
+        {
+            // Using WinForms for the openFileDialog because it's simpler and much easier
+            using (FolderBrowserDialog openFolderDialog = new FolderBrowserDialog())
+            {
+                //openFolderDialog.RootFolder = Environment.SpecialFolder.MyPictures;
+
+                if (openFolderDialog.ShowDialog() == DialogResult.OK)
+                {
+                    Task.Factory.StartNew(() =>
+                    {
+                        try
+                        {
+                            string selectedCatalog = openFolderDialog.SelectedPath;
+                            AddLog(selectedCatalog);
+                            var langFolders = Directory.GetDirectories(selectedCatalog);
+                            AddLog("Scanning languages");
+                            //AddLog(langFolders.Length.ToString());
+                            foreach (string langFolder in langFolders)
+                            {
+                                AddLog(langFolder);
+                                var lang = langFolder.Split('\\').Last();
+                                AddLog("Scanning themes");
+                                var themeFolders = Directory.GetDirectories(langFolder);
+                                foreach (string themeFolder in themeFolders)
+                                {
+                                    var theme = themeFolder.Split('\\').Last();
+                                    AddLog("Going over themes");
+                                    var screenshotMetaList = Directory.GetFiles(themeFolder, "*.json");
+                                    foreach (string screenshotMeta in screenshotMetaList)
+                                    {
+                                        string filename_prefix = screenshotMeta.Split('\\').Last().Split('.').First();
+                                        string full_file_path = selectedCatalog + @"\" + lang + @"\" + theme + @"\" +
+                                                                filename_prefix + ".png";
+                                        AddLog("Testing file: " + full_file_path);
+                                        //Get the path of specified file
+                                        Bitmap image = new Bitmap(full_file_path);
+                                        OCR.UpdateWindow(image);
+                                        OCR.ProcessRewardScreen(image);
+                                    }
+                                    
+                                }
+                            }
+                        }
+                        catch (Exception e)
+                        {
+                            AddLog(e.Message);
+                            StatusUpdate("Failed to load image", 1);
+                        }
+                    }, CancellationToken.None, TaskCreationOptions.DenyChildAttach, TaskScheduler.Default);
                 }
                 else
                 {

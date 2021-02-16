@@ -164,17 +164,17 @@ namespace WFInfo
             }
         }
 
-        internal static void ProcessRewardScreen(Bitmap file = null)
+        internal static string[][] ProcessRewardScreen(Bitmap file = null)
         {
             #region initializers
             if (processingActive)
             {
                 Main.StatusUpdate("Still Processing Reward Screen", 2);
-                return;
+                return new string[2][]{ null, null};
             }
 
             var primeRewards = new List<string>();
-
+            string[] secondChecks = null;
             processingActive = true;
             Main.StatusUpdate("Processing...", 0);
             Main.AddLog("----  Triggered Reward Screen Processing  ------------------------------------------------------------------");
@@ -196,7 +196,7 @@ namespace WFInfo
             {
                 processingActive = false;
                 Debug.WriteLine(e);
-                return;
+                return new string[2][] { null, null };
             }
 
 
@@ -363,7 +363,7 @@ namespace WFInfo
 
                 if (partialScreenshot.Height < 70 && Settings.doDoubleCheck)
                 {
-                    SlowSecondProcess();
+                    secondChecks = SlowSecondProcess();
                     end = watch.ElapsedMilliseconds;
                     Main.StatusUpdate("Completed second pass(" + (end - start) + "ms)", 0);
                 }
@@ -397,7 +397,7 @@ namespace WFInfo
             }
 
             processingActive = false;
-
+            return new string[2][] { firstChecks, secondChecks };
         }
 
         internal static int GetSelectedReward(Point lastClick)
@@ -529,7 +529,7 @@ namespace WFInfo
 
         }
 
-        public static void SlowSecondProcess()
+        public static string[] SlowSecondProcess()
         {
             #region initilizers
             var tempclipboard = "";
@@ -679,6 +679,7 @@ namespace WFInfo
                     });
                 }
                 newFilter.Dispose();
+                return firstChecks;
             }
             catch (Exception ex)
             {
