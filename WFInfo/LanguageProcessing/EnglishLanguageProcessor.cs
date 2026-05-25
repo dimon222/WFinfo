@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using WFInfo.Settings;
 
@@ -18,11 +19,40 @@ namespace WFInfo.LanguageProcessing
 
         public override string[] BlueprintRemovals => new[] { "Blueprint" };
 
+        private static readonly IReadOnlyDictionary<string, string> _ignoredItemNames = new Dictionary<string, string>
+        {
+            ["Forma Blueprint"] = "Forma Blueprint",
+            ["Exilus Weapon Adapter Blueprint"] = "Exilus Weapon Adapter Blueprint",
+            ["Kuva"] = "Kuva",
+            ["Riven Sliver"] = "Riven Sliver",
+            ["Ayatan Amber Star"] = "Ayatan Amber Star",
+            ["Ayatan Cyan Star"] = "Ayatan Cyan Star",
+            ["Galariak Prime Blueprint"] = "Galariak Prime Blueprint",
+            ["Galariak Prime Blade"] = "Galariak Prime Blade",
+            ["Galariak Prime Handle"] = "Galariak Prime Handle",
+            ["Sagek Prime Blueprint"] = "Sagek Prime Blueprint",
+            ["Sagek Prime Barrel"] = "Sagek Prime Barrel",
+            ["Sagek Prime Receiver"] = "Sagek Prime Receiver"
+        };
+
+        public override IReadOnlyDictionary<string, string> IgnoredItemNames => _ignoredItemNames;
+
         public override string CharacterWhitelist => "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
         public override int CalculateLevenshteinDistance(string s, string t)
         {
-            return DefaultLevenshteinDistance(s, t);
+            // Use the minimum of raw (with spaces) and space-free comparison.
+            // Space-free fixes concatenated words (e.g. "HydroidPrime Neuroptics" →
+            // "hydroidprimeneuroptics" matches "hydroidprimeneuroptics" better than
+            // "hydroidprime" + "blueprint" since both sides lose spaces equally).
+            // Raw handles cases like garbled "BIueorlnt" which is closer to "blueprint"
+            // with spaces preserved.
+            // No "Blueprint" stripping: it creates asymmetry when OCR garbles "Blueprint"
+            // into something unrecognizable — stripping removes it from keys but not OCR,
+            // letting the garbled fragment falsely match another key's suffix.
+            int raw = DefaultLevenshteinDistance(s, t);
+            int noSpaces = DefaultLevenshteinDistance(s.Replace(" ", ""), t.Replace(" ", ""));
+            return Math.Min(raw, noSpaces);
         }
 
         public override string NormalizeForPatternMatching(string input)
@@ -50,6 +80,23 @@ namespace WFInfo.LanguageProcessing
         {
             // English filters very short words (less than 2 characters)
             return !string.IsNullOrEmpty(word) && word.Length < 2;
+        }
+
+        public override string RemoveBlueprintTerms(string localizedName)
+        {
+            if (string.IsNullOrEmpty(localizedName))
+                return localizedName;
+
+            // Apply generic BlueprintRemovals first (handles "Blueprint" suffix/standalone)
+            string result = base.RemoveBlueprintTerms(localizedName);
+
+            // Extra aggressive patterns for English OCR edge cases like concatenation
+            // Handles "nameBlueprint" (no space) from merged OCR text
+            result = Regex.Replace(result, "\\s*Blueprint\\s*$", "", RegexOptions.IgnoreCase);
+            result = Regex.Replace(result, "\\s*Blueprint\\s+", " ", RegexOptions.IgnoreCase);
+            result = Regex.Replace(result, "^Blueprint\\s*[:\\-–—]?\\s*", "", RegexOptions.IgnoreCase);
+
+            return result.Trim();
         }
     }
 }

@@ -18,7 +18,9 @@ namespace WFInfo.LanguageProcessing
     {
         // Per-type normalized blueprint removals to avoid recomputing on every call
         private static readonly ConcurrentDictionary<Type, string[]> _normalizedBlueprintRemovalsCache = new ConcurrentDictionary<Type, string[]>();
-        
+        // Per-type ignored item names HashSet for O(1) lookup performance
+        private static readonly ConcurrentDictionary<Type, HashSet<string>> _ignoredItemNamesCache = new ConcurrentDictionary<Type, HashSet<string>>();
+
         protected readonly IReadOnlyApplicationSettings _settings;
         protected readonly CultureInfo _culture;
 
@@ -78,9 +80,78 @@ namespace WFInfo.LanguageProcessing
         public abstract string[] BlueprintRemovals { get; }
 
         /// <summary>
+        /// Gets the ignored item name translations for this language.
+        /// Maps English ignored item names to their localized equivalents.
+        /// </summary>
+        public abstract IReadOnlyDictionary<string, string> IgnoredItemNames { get; }
+
+        /// <summary>
+        /// Gets a HashSet of all ignored item names (both English and localized) for O(1) lookup.
+        /// This is cached per processor type to avoid rebuilding on every call.
+        /// </summary>
+        public HashSet<string> GetIgnoredItemNamesHashSet()
+        {
+            return _ignoredItemNamesCache.GetOrAdd(GetType(), type =>
+            {
+                var hashSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var ignoredItems = IgnoredItemNames;
+
+                if (ignoredItems != null)
+                {
+                    foreach (var kvp in ignoredItems)
+                    {
+                        // Add both English key and localized value
+                        if (!string.IsNullOrEmpty(kvp.Key))
+                            hashSet.Add(kvp.Key);
+                        if (!string.IsNullOrEmpty(kvp.Value))
+                            hashSet.Add(kvp.Value);
+                    }
+                }
+
+                return hashSet;
+            });
+        }
+
+        /// <summary>
+        /// Checks if a part name is an ignored item using efficient HashSet lookup.
+        /// Also performs substring matching to handle OCR with leading/trailing garbage.
+        /// </summary>
+        /// <param name="partName">Part name to check (can be English or localized)</param>
+        /// <returns>True if the item should be ignored (0 plat/ducats)</returns>
+        public virtual bool IsIgnoredItem(string partName)
+        {
+            if (string.IsNullOrEmpty(partName))
+                return false;
+
+            var ignoredSet = GetIgnoredItemNamesHashSet();
+            if (ignoredSet.Contains(partName))
+                return true;
+
+            // Substring matching: check if any ignored item name is contained within the OCR text
+            // This handles cases like "제 잃빼미 포르마 설계도" containing "포르마 설계도"
+            foreach (var ignoredName in ignoredSet)
+            {
+                if (!string.IsNullOrEmpty(ignoredName) && ignoredName.Length >= 4)
+                {
+                    if (partName.Contains(ignoredName))
+                        return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
         /// Gets the Tesseract character whitelist for this language
         /// </summary>
         public abstract string CharacterWhitelist { get; }
+
+        /// <summary>
+        /// Gets the maximum Levenshtein distance ratio for matching (0.0-1.0).
+        /// Matches with distance >= threshold * stringLength are rejected.
+        /// Default is 0.5 (50%), languages with severe OCR issues may override to 0.6 (60%).
+        /// </summary>
+        public virtual double DistanceThresholdRatio => 0.5;
 
         /// <summary>
         /// Calculates Levenshtein distance between two strings using language-specific logic
@@ -113,6 +184,48 @@ namespace WFInfo.LanguageProcessing
         {
             // Default implementation: filter very short words (less than 2 characters)
             return !string.IsNullOrEmpty(word) && word.Length < 2;
+        }
+
+        /// <summary>
+        /// Removes blueprint terms from a localized part name for clipboard display.
+        /// Override in language-specific processors for custom cleanup logic.
+        /// </summary>
+        /// <param name="localizedName">Localized part name to clean</param>
+        /// <returns>Cleaned part name with blueprint terms removed</returns>
+        public virtual string RemoveBlueprintTerms(string localizedName)
+        {
+            if (string.IsNullOrEmpty(localizedName))
+                return localizedName;
+
+            string result = localizedName;
+
+            var blueprintTerms = BlueprintRemovals;
+            if (blueprintTerms != null)
+            {
+                foreach (var term in blueprintTerms)
+                {
+                    if (string.IsNullOrEmpty(term))
+                        continue;
+
+                    string escapedTerm = Regex.Escape(term);
+
+                    // Remove " Term" or " Term " patterns (case insensitive)
+                    result = Regex.Replace(result, $"\\s+{escapedTerm}\\s*$", "", RegexOptions.IgnoreCase);
+                    result = Regex.Replace(result, $"\\s+{escapedTerm}\\s+", " ", RegexOptions.IgnoreCase);
+
+                    // Remove term preceded by common punctuation: " - Term", " – Term", " — Term", ": Term"
+                    result = Regex.Replace(result, $"[:\\-–—]\\s*{escapedTerm}\\s*$", "", RegexOptions.IgnoreCase);
+                    result = Regex.Replace(result, $"[:\\-–—]\\s*{escapedTerm}\\s+", " ", RegexOptions.IgnoreCase);
+
+                    // Remove term followed by common punctuation: "Term - ", "Term:"
+                    result = Regex.Replace(result, $"\\s*{escapedTerm}\\s*[:\\-–—]", "", RegexOptions.IgnoreCase);
+
+                    // Remove term at boundaries (standalone)
+                    result = Regex.Replace(result, $"\\b{escapedTerm}\\b", "", RegexOptions.IgnoreCase);
+                }
+            }
+
+            return result.Trim();
         }
 
         /// <summary>
@@ -176,7 +289,7 @@ namespace WFInfo.LanguageProcessing
                     distance = SimpleLevenshteinDistance(normalizedInput, normalizedStored);
                 }
 
-                if (distance < bestDistance && distance < localizedName.Length * 0.5)
+                if (distance < bestDistance && distance < localizedName.Length * this.DistanceThresholdRatio)
                 {
                     bestDistance = distance;
                     bestMatch = split[0]; // Return the English name

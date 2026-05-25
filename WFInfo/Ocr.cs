@@ -1,4 +1,4 @@
-using Newtonsoft.Json.Linq;
+﻿using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -43,6 +43,10 @@ namespace WFInfo
         EQUINOX,
         DARK_LOTUS,
         ZEPHYR,
+        CONQUERA,
+        DEADLOCK,
+        LUNAR_RENEWAL,
+        POM_2,
         UNKNOWN = -1,
         AUTO = -2,
         CUSTOM = -3
@@ -71,7 +75,11 @@ namespace WFInfo
 															Color.FromArgb(255, 255, 255),  	//LEGACY		
 															Color.FromArgb(158, 159, 167),  	//EQUINOX		
 															Color.FromArgb(140, 119, 147),      //DARK_LOTUS
-                                                            Color.FromArgb(253, 132,   2), };   //ZEPHER
+                                                            Color.FromArgb(253, 132,   2),      //ZEPHER
+                                                            Color.FromArgb(200, 100, 200),      //CONQUERA - medium-light purple
+                                                            Color.FromArgb(25, 35, 60),      //DEADLOCK - dark navy
+                                                            Color.FromArgb(160, 40, 40),      //LUNAR_RENEWAL - deep red
+                                                            Color.FromArgb(12, 45, 25), };    //POM_2 - actual dark forest green
 
     //highlight colors from selected items
     public static Color[] ThemeSecondary = new Color[] {    Color.FromArgb(245, 227, 173),		//VITRUVIAN		
@@ -88,7 +96,11 @@ namespace WFInfo
 															Color.FromArgb(232, 213,  93),  	//LEGACY		
 															Color.FromArgb(232, 227, 227),  	//EQUINOX		
 															Color.FromArgb(200, 169, 237),      //DARK_LOTUS	
-                                                            Color.FromArgb(255,  53,   0) };    //ZEPHER	
+                                                            Color.FromArgb(255,  53,   0),      //ZEPHER
+                                                            	Color.FromArgb(255, 215,   0),      //CONQUERA
+                                                            Color.FromArgb(255, 255, 255),      //DEADLOCK
+                                                            Color.FromArgb(255, 200, 100),      //LUNAR_RENEWAL
+                                                            Color.FromArgb(100, 255, 100) };    //POM_2	
 
 
     private static int numberOfRewardsDisplayed;
@@ -267,7 +279,7 @@ namespace WFInfo
             Task.WaitAll(tasks);
 
             // Remove any empty (or suspiciously short) items from the array
-            firstChecks = firstChecks.Where(s => !string.IsNullOrEmpty(s) && s.Replace(" ", "").Length > 6).ToArray();
+            firstChecks = firstChecks.Where(s => !string.IsNullOrEmpty(s) && PartNameValid(s)).ToArray();
             if (firstChecks == null || firstChecks.Length == 0)
             {
                 processingActive = false;
@@ -335,7 +347,14 @@ namespace WFInfo
                     {
                         hideRewardInfo = true;
                     }
-                    //else if (correctName != "Kuva" || correctName != "Exilus Weapon Adapter Blueprint" || correctName != "Riven Sliver" || correctName != "Ayatan Amber Star")
+
+                    // Check if this is an ignored item using both English name AND raw OCR text (localized)
+                    // This catches items even if GetPartName() fails to convert properly
+                    if (Main.dataBase.IsIgnoredItem(correctName) || Main.dataBase.IsIgnoredItem(part))
+                    {
+                        hideRewardInfo = true;
+                    }
+
                     primeRewards.Add(correctName);
                     string plat = job["plat"].ToObject<string>();
                     string primeSetPlat = null;
@@ -379,7 +398,12 @@ namespace WFInfo
                     {
                         if (!string.IsNullOrEmpty(clipboard)) { clipboard += "-  "; }
 
-                        clipboard += "[" + correctName.Replace(" Blueprint", "") + "]: " + plat + ":platinum: ";
+                        // Get localized name for clipboard (uses current WFInfo locale)
+                        string localizedName = Main.dataBase.GetLocalizedNameForClipboard(correctName);
+                        // Remove blueprint terms for the current language
+                        localizedName = Main.dataBase.RemoveBlueprintTerms(localizedName);
+
+                        clipboard += "[" + localizedName + "]: " + plat + ":platinum: ";
 
                         if (primeSetPlat != null)
                         {
@@ -480,8 +504,8 @@ namespace WFInfo
             Debug.WriteLine(lastClick.ToString());
             var primeRewardIndex = 0;
             lastClick.Offset(-_window.Window.X, -_window.Window.Y);
-            var width = _window.Window.Width * (int)_window.DpiScaling;
-            var height = _window.Window.Height * (int)_window.DpiScaling;
+            var width = _window.Window.Width;
+            var height = _window.Window.Height;
             var mostWidth = (int)(pixleRewardWidth * _window.ScreenScaling * uiScaling);
             var mostLeft = (width / 2) - (mostWidth / 2);
             var bottom = height / 2 - (int)((pixleRewardYDisplay - pixleRewardHeight) * _window.ScreenScaling * 0.5 * uiScaling);
@@ -640,7 +664,7 @@ namespace WFInfo
 
 
 
-                    double[] weights = new double[15] { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, };
+                    double[] weights = new double[Enum.GetValues(typeof(WFtheme)).Cast<int>().Max() + 1];
             int minWidth = mostWidth / 4;
 
             if (image == null || image.Height == 0)
@@ -723,14 +747,16 @@ namespace WFInfo
         }
 
         /// <summary>
-        /// Gets the maximum allowed Levenshtein distance threshold for part name matching
+        /// Gets the maximum allowed Levenshtein distance threshold for part name matching.
+        /// Uses the current language processor's DistanceThresholdRatio for locale-aware thresholds.
         /// </summary>
         /// <param name="partNameLength">Length of the part name</param>
         /// <returns>Maximum allowed Levenshtein distance</returns>
         private static int GetMaxAllowedLevenshteinDistance(int partNameLength)
         {
-            // Use 50% of string length with a minimum floor of 3 for consistency
-            return Math.Max((int)Math.Ceiling(partNameLength * 0.5), 3);
+            var processor = LanguageProcessorFactory.GetCurrentProcessor();
+            double ratio = processor?.DistanceThresholdRatio ?? 0.5;
+            return Math.Max((int)Math.Ceiling(partNameLength * ratio), 3);
         }
 
         /// <summary>
@@ -756,6 +782,7 @@ namespace WFInfo
                 snapItImage.Save(Main.AppPath + @"\Debug\SnapItImage " + timestamp + ".png");
             Bitmap snapItImageFiltered = ScaleUpAndFilter(snapItImage, theme, out int[] rowHits, out int[] colHits);
             snapItImageFiltered.Save(Main.AppPath + @"\Debug\SnapItImageFiltered " + timestamp + ".png");
+            double imageScale = (double)snapItImageFiltered.Height / snapItImage.Height;
             List<InventoryItem> foundParts = FindAllParts(snapItImageFiltered, snapItImage, rowHits, colHits); 
             long end = watch.ElapsedMilliseconds;
             Main.StatusUpdate("Completed snapit Processing(" + (end - start) + "ms)", 0);
@@ -834,7 +861,11 @@ namespace WFInfo
                     csv += name + "," + plat + "," + ducats + "," + volume + "," + vaulted.ToString(Main.culture) + "," + owned + "," + partsDetected + ", \"\"" + Environment.NewLine;
                 }
 
-                int width = (int)(part.Bounding.Width * _window.ScreenScaling);
+                int origX = (int)(part.Bounding.X / imageScale);
+                int origY = (int)(part.Bounding.Y / imageScale);
+                int origW = (int)(part.Bounding.Width / imageScale);
+
+                int width = (int)(origW * _window.ScreenScaling);
                 if (width < _settings.MinOverlayWidth)
                 {
                     //if (width < 50)
@@ -853,7 +884,7 @@ namespace WFInfo
                     itemOverlay.LoadTextData(name, plat, primeSetPlat, ducats, volume, vaulted, mastered, partsOwned, partsDetected, false, doWarn);
                     itemOverlay.toSnapit();
                     itemOverlay.Resize(width);
-                    itemOverlay.Display((int)(_window.Window.X + snapItOrigin.X + (part.Bounding.X - width / 8) / _window.DpiScaling), (int)((_window.Window.Y + snapItOrigin.Y + part.Bounding.Y - itemOverlay.Height) / _window.DpiScaling), _settings.SnapItDelay);
+                    itemOverlay.Display((int)((_window.Window.X + snapItOrigin.X * _window.DpiScaling + origX) / _window.DpiScaling - width / 8.0), (int)((_window.Window.Y + snapItOrigin.Y * _window.DpiScaling + origY - itemOverlay.Height * _window.DpiScaling) / _window.DpiScaling), _settings.SnapItDelay);
                 });
             }
 
@@ -1009,10 +1040,31 @@ namespace WFInfo
             // Use single PSM mode for deterministic results
             // SparseText is best for SnapIt: finds text anywhere in the image regardless of layout
             var results = new List<Tuple<String, Rectangle>>();
-            
+
+            // Upscale small zones before OCR so Tesseract sees adequately-sized text.
+            // At 4K 100% menu scale, zone text can be ~12-14px — too small for reliable
+            // character segmentation (e.g. "Link" loses strokes → "in"). Target ≥80px height.
+            double scale = 1.0;
+            Bitmap scaledImage = null;
+            if (image.Height < 80)
+            {
+                scale = Math.Max(2.0, Math.Ceiling(80.0 / image.Height));
+                int sw = (int)(image.Width * scale);
+                int sh = (int)(image.Height * scale);
+                scaledImage = new Bitmap(sw, sh);
+                scaledImage.SetResolution(image.HorizontalResolution, image.VerticalResolution);
+                using (var g = Graphics.FromImage(scaledImage))
+                {
+                    g.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighQuality;
+                    g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                    g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
+                    g.DrawImage(image, 0, 0, sw, sh);
+                }
+            }
+
             try
             {
-                using (var page = engine.Process(image, PageSegMode.SparseText))
+                using (var page = engine.Process(scaledImage ?? image, PageSegMode.SparseText))
                 {
                     using (var iterator = page.GetIterator())
                     {
@@ -1021,7 +1073,12 @@ namespace WFInfo
                         {
                             string currentWord = iterator.GetText(PageIteratorLevel.TextLine);
                             iterator.TryGetBoundingBox(PageIteratorLevel.TextLine, out Rect tempbounds);
-                            Rectangle bounds = new Rectangle(tempbounds.X1 + rectXOffset, tempbounds.Y1 + rectYOffset, tempbounds.Width, tempbounds.Height);
+                            // Scale bounds back to original coordinate space when upscaled
+                            Rectangle bounds = new Rectangle(
+                                (int)(tempbounds.X1 / scale) + rectXOffset,
+                                (int)(tempbounds.Y1 / scale) + rectYOffset,
+                                (int)(tempbounds.Width / scale),
+                                (int)(tempbounds.Height / scale));
                             if (currentWord != null)
                             {
                                 currentWord = currentWord.Trim();
@@ -1039,6 +1096,10 @@ namespace WFInfo
             {
                 // Log OCR extraction failure for debugging
                 Main.AddLog($"OCR extraction failed in GetTextWithBoundsFromImage: {ex.Message}\n{ex.ToString()}");
+            }
+            finally
+            {
+                scaledImage?.Dispose();
             }
             return results;
         }
@@ -1194,7 +1255,7 @@ namespace WFInfo
                     // causes padded bounds to overlap with adjacent items
                     double hMargin = IsCJKLocale() 
                         ? Math.Min(_settings.SnapItHorizontalNameMargin, 0.3)  // Cap at 0.3 for CJK
-                        : _settings.SnapItHorizontalNameMargin;
+                        : Math.Max(_settings.SnapItHorizontalNameMargin, 0.2);  // Min 0.2 for Latin to bridge horizontal text splits
                     int HorizontalPad = (int)(bounds.Height * hMargin);
                     
                                         
@@ -1239,7 +1300,7 @@ namespace WFInfo
                     // Max combined width to prevent merging text from different items in the grid
                     // Each item tile is roughly 130-140px wide at 1080p; cap at 160px to allow
                     // multi-line wrapping within one item but prevent cross-item cascading merges
-                    int maxGroupWidth = (int)(160 * _window.ScreenScaling);
+                    int maxGroupWidth = (int)(180 * _window.ScreenScaling);
 
                     for (; i >= 0; i--)
                     {
@@ -1252,6 +1313,48 @@ namespace WFInfo
                             if (combinedWidth <= maxGroupWidth)
                                 break; // OK to merge
                             // else: skip this group, too wide — would merge across items
+                        }
+                    }
+
+                    // Fallback: if no intersecting group found, try proximity-based merge
+                    // for Tesseract line-split fragments. Only merge with single-fragment
+                    // groups to prevent cascade, and skip very short text (OCR noise).
+                    // CJK/Japanese/Korean tokens are meaningful at shorter lengths, so use
+                    // locale-aware threshold (3 for CJK, 5 for Latin).
+                    if (i == -1 && foundItems.Count > 0)
+                    {
+                        int bestIdx = -1;
+                        int bestGap = int.MaxValue;
+                        int minMergeLen = IsCJKLocale() ? 3 : 5;
+                        for (int p = foundItems.Count - 1; p >= 0; p--)
+                        {
+                            if (foundItems[p].Item1.Count != 1) continue;
+                            if (foundItems[p].Item1[0].Name.Length < minMergeLen) continue;
+                            if (currentWord.Length < minMergeLen) continue;
+                            var groupBounds = foundItems[p].Item2;
+                            int vertGap = Math.Max(0, Math.Max(paddedBounds.Top - groupBounds.Bottom, groupBounds.Top - paddedBounds.Bottom));
+                            int avgHeight = (paddedBounds.Height + groupBounds.Height) / 2;
+                            if (vertGap <= avgHeight && vertGap < bestGap)
+                            {
+                                int overlapLeft = Math.Max(paddedBounds.Left, groupBounds.Left);
+                                int overlapRight = Math.Min(paddedBounds.Right, groupBounds.Right);
+                                if (overlapRight > overlapLeft)
+                                {
+                                    int combinedLeft = Math.Min(groupBounds.Left, paddedBounds.Left);
+                                    int combinedRight = Math.Max(groupBounds.Right, paddedBounds.Right);
+                                    if (combinedRight - combinedLeft <= maxGroupWidth)
+                                    {
+                                        bestIdx = p;
+                                        bestGap = vertGap;
+                                    }
+                                }
+                            }
+                        }
+                        if (bestIdx >= 0)
+                        {
+                            if (_settings.Debug)
+                                Main.AddLog($"SnapIt: Proximity merging \"{currentWord}\" with existing group (gap={bestGap}, avgH={((paddedBounds.Height + foundItems[bestIdx].Item2.Height) / 2)})");
+                            i = bestIdx;
                         }
                     }
 
@@ -1277,7 +1380,6 @@ namespace WFInfo
                 }
             }
 
-            
             // Process item groups
             foreach( Tuple<List<InventoryItem>, Rectangle> itemGroup in foundItems)
             {
@@ -1416,12 +1518,7 @@ namespace WFInfo
 
 
 
-                //set OCR to numbers only
-                try
-                {
-                    _tesseractService.SetNumbersOnlyMode();
-
-                    double widthMultiplier = (_settings.DoCustomNumberBoxWidth ? _settings.SnapItNumberBoxWidth : 0.4);
+                double widthMultiplier = (_settings.DoCustomNumberBoxWidth ? _settings.SnapItNumberBoxWidth : 0.4);
                 //Process grid system
                 for (int i = 0; i < Rows.Count; i++)
                 {
@@ -1727,7 +1824,7 @@ namespace WFInfo
                         g.DrawRectangle(cyan, cloneRect);
 
                         //do OCR
-                        using (var page = _tesseractService.FirstEngine.Process(cloneBitmap, PageSegMode.SingleLine))
+                        using (var page = _tesseractService.NumbersOnlyEngine.Process(cloneBitmap, PageSegMode.SingleLine))
                         {
                             using (var iterator = page.GetIterator())
                             {
@@ -1765,13 +1862,6 @@ namespace WFInfo
                         cloneBitmapColoured.Dispose();
                         cloneBitmap.Dispose();
                     }
-                }
-                
-                //return OCR to any symbols
-                }
-                finally
-                {
-                    _tesseractService.ResetToDefaultMode();
                 }
             }
             darkCyan.Dispose();
@@ -2186,6 +2276,15 @@ namespace WFInfo
                 case WFtheme.ZEPHYR:
                 return ((Math.Abs(test.GetHue() - primary.GetHue()) < 4 && test.GetSaturation() >= 0.55)
                     || (Math.Abs(test.GetHue() - secondary.GetHue()) < 4 && test.GetSaturation() >= 0.66)) && test.GetBrightness() >= 0.25;
+                case WFtheme.CONQUERA:
+                return (Math.Abs(test.GetHue() - primary.GetHue()) < 25 && test.GetSaturation() >= 0.20 && test.GetBrightness() >= 0.15 && test.GetBrightness() <= 0.65)
+                    || (test.GetSaturation() <= 0.25 && test.GetBrightness() >= 0.55);
+                case WFtheme.DEADLOCK:
+                return test.GetSaturation() <= 0.08 && test.GetBrightness() >= 0.80;
+                case WFtheme.LUNAR_RENEWAL:
+                return test.GetSaturation() <= 0.15 && test.GetBrightness() >= 0.85;
+                case WFtheme.POM_2:
+                return Math.Abs(test.GetHue() - secondary.GetHue()) < 30 && test.GetSaturation() >= 0.25 && test.GetBrightness() >= 0.55;
                 default:
                     // This shouldn't be ran
                     //   Only for initial testing
@@ -2971,7 +3070,7 @@ namespace WFInfo
 
             foreach (var p in parts) p.Dispose();
 
-            var validChecks = checks.Where(s => !string.IsNullOrEmpty(s) && s.Replace(" ", "").Length > 6).ToArray();
+            var validChecks = checks.Where(s => PartNameValid(s)).ToArray();
 
             foreach (var part in validChecks)
             {
