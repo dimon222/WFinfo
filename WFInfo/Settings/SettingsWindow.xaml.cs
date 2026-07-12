@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -12,6 +13,7 @@ namespace WFInfo.Settings
     public partial class SettingsWindow : Window
     {
         private readonly SettingsViewModel _viewModel;
+        private CancellationTokenSource _localeRefreshCts;
         public SettingsViewModel SettingsViewModel => _viewModel;
 
         public static KeyConverter converter = new KeyConverter();
@@ -196,13 +198,22 @@ namespace WFInfo.Settings
             _viewModel.Locale = selectedLocale;
             Save();
 
-            _ = OCR.updateEngineAsync();
+            _localeRefreshCts?.Cancel();
+            _localeRefreshCts?.Dispose();
+            _localeRefreshCts = new CancellationTokenSource();
+            var token = _localeRefreshCts.Token;
 
-            Task.Run(async() =>
+            Task.Run(async () =>
             {
                 try
                 {
-                    await Main.dataBase.ReloadItems();
+                    await OCR.UpdateEngineAsync().ConfigureAwait(false);
+                    token.ThrowIfCancellationRequested();
+                    await Main.dataBase.ReloadItems().ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    // Superseded by newer locale change — discard
                 }
                 catch (Exception ex)
                 {
@@ -210,7 +221,7 @@ namespace WFInfo.Settings
                     Main.StatusUpdate("Locale change failed", 2);
                     Main.RunOnUIThread(() => Main.SpawnErrorPopup(DateTime.Now, 0));
                 }
-            });
+            }, token);
         }
 
 

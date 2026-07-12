@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Diagnostics;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using WFInfo.Settings;
@@ -52,6 +53,18 @@ namespace WFInfo.Services.WarframeProcess
                     {
                         Main.dataBase.EnableLogCapture(); 
                     }
+
+                    if (!GameIsStreamed)
+                    {
+                        Task.Run(() =>
+                        {
+                            string cfgPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)
+                                + @"\Warframe\EE.cfg";
+                            if (!File.Exists(cfgPath)) return;
+                            if (!File.ReadAllText(cfgPath).Contains("Graphics.ColorBlindCompensation")) return;
+                            Main.RunOnUIThread(() => Main.SpawnColorblindWarning());
+                        });
+                    }
                 }
 
                 // Invoking action
@@ -70,6 +83,7 @@ namespace WFInfo.Services.WarframeProcess
         private Timer find_process_timer;
         private const int FindProcessTimerDuration = 40000; // ms
         private bool _wasRunningPreviously = false;
+        private bool _lastDetectionFailed = false;
         private int _isFinding = 0; // 0 = idle, 1 = running (Interlocked)
 
         public WarframeProcessFinder(IReadOnlyApplicationSettings settings)
@@ -148,6 +162,12 @@ namespace WFInfo.Services.WarframeProcess
                         Main.AddLog($"Failed to get Warframe process due to: {e.Message}");
                         Main.StatusUpdate("Restart Warframe without admin privileges, or WFInfo with admin privileges", 1);
                     }
+
+                    if (identified_process != null && !wasRunning && _lastDetectionFailed)
+                    {
+                        Main.StatusUpdate("Warframe Process Detected", 0);
+                        _lastDetectionFailed = false;
+                    }
                 }
                 else
                 {
@@ -155,6 +175,7 @@ namespace WFInfo.Services.WarframeProcess
                     {
                         Main.AddLog("Did Not Detect Warframe Process");
                         Main.StatusUpdate("Unable to Detect Warframe Process", 1);
+                        _lastDetectionFailed = true;
                     }
                 }
                 
