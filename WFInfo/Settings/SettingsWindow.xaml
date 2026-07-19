@@ -403,6 +403,19 @@
                         </TextBox>
                     </UniformGrid>
                 </Border>
+                <Border DockPanel.Dock="Top"
+                        Padding="15 5 25 5">
+                    <UniformGrid Rows="1">
+                        <Label Content="UI Scale">
+                            <Label.ToolTip><ToolTip><TextBlock Text="In-game UI scale override (50-100). 0 = auto (uses EE.cfg or heuristics)." TextWrapping="Wrap" MaxWidth="300"/></ToolTip></Label.ToolTip>
+                        </Label>
+                        <TextBox x:Name="uiScaling_textbox"
+                                 Text="{Binding SettingsViewModel.UserUiScaling, Mode=TwoWay}"
+                                 components:NumericOnlyEntry.RegexFilter="^[0-9]+$">
+                            <TextBox.ToolTip><ToolTip><TextBlock Text="0 = auto, 50-100 = custom UI scale percentage" TextWrapping="Wrap" MaxWidth="300"/></ToolTip></TextBox.ToolTip>
+                        </TextBox>
+                    </UniformGrid>
+                </Border>
                 <Border Padding="0"
                         DockPanel.Dock="Top">
                     <DockPanel>
